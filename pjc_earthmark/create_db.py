@@ -59,10 +59,7 @@ with Session(engine) as session:
 		session.add(Tokens(client=cl, 
                            token=uuid4().hex, 
                            package=pa,
-                           active=True,
                            email=em,
                            contact_person=nm,
-                           create_date=str(datetime.now()), 
-                           updated_date=str(datetime.now()) 
-                          ))
+                           create_date=str(datetime.now())))
 	session.commit()

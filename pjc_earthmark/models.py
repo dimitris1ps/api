@@ -1,5 +1,4 @@
 from sqlmodel import SQLModel, Field
-# from pydantic import BaseModel
 from typing import Optional
 
 class Ratings(SQLModel, table=True):
@@ -16,11 +15,9 @@ class Tokens(SQLModel, table=True):
     client: str
     token: str
     package: str
-    active: Optional[bool] = Field(default=True)
     email: Optional[str] = None
     contact_person: Optional[str] = None
     create_date: str
-    updated_date: str
 
 class Statistics(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

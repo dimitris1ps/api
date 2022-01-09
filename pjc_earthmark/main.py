@@ -1,4 +1,4 @@
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Query
 from fastapi.exceptions import HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 
@@ -10,6 +10,7 @@ from database import engine
 
 import pandas as pd
 from datetime import datetime
+from uuid import uuid4
 
 import os
 
@@ -138,68 +139,89 @@ def get_stats(user: str, token: str, companies: Optional[str] = None):
         return BASE_DIR+'\\report.csv'
 
 
+@app.get('/token/create', status_code=status.HTTP_200_OK, response_model=list)
+def create_token(user: str, 
+                 token: str, 
+                 client: str, 
+                 package: str = Query(None, title="Type of package",
+                                            description="Possible packages are: small, medium, large and xlarge",
+                                            example="package=medium",
+                                            regex="^small$|^medium$|^large$|^xlarge$"),
+                 email: Optional[str] = None, 
+                 contact_person: Optional[str] = None):
+
+    if not((user.lower() == EARTH_USER.lower()) & (token == EARTH_CRED)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, 
+                            detail='Username and or token does not match. Please contact the admin')
 
 
+    flag = 0
+    with Session(engine) as sess:
+        statement = select(Tokens).where(Tokens.client == client.lower(), Tokens.package == package)
+        try:
+            exists_ = sess.exec(statement).one()
+            flag = 1
+        except:
+            pass
 
 
+    if flag:
+        with Session(engine) as sess:
+            if email:
+                exists_.email = email
+            if contact_person:
+                exists_.contact_person = contact_person
+
+            exists_.token = uuid4().hex
+            exists_.package = package
+            exists_.create_date = str(datetime.now())
+            session.add(exists_)
+            session.commit()
+    else:
+        session.add(Tokens(client = client.lower(), 
+                           token = uuid4().hex, 
+                           package = package, 
+                           email = email,
+                           contact_person = contact_person,
+                           create_date=str(datetime.now())))
+        session.commit()
+
+    res = [el for el in session.execute(f"""Select id, 
+                                                   client, 
+                                                   token, 
+                                                   package, 
+                                                   email, 
+                                                   contact_person, 
+                                                   create_date
+                                            from Tokens 
+                                            where lower(client) = '{client.lower()}'""")]
+
+    return res
 
 
+@app.get('/token/view', status_code=status.HTTP_200_OK, response_class=HTMLResponse)
+def view_token(user: str, 
+               token: str, 
+               client: Optional[str] = None):
 
+    if not((user.lower() == EARTH_USER.lower()) & (token == EARTH_CRED)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, 
+                            detail='Username and or token does not match. Please contact the admin')
 
+    if client:
+        clients = ["'"+cmp.strip()+"'" for cmp in client.lower().split(';') if cmp.strip() != ""]
+        clients = ",".join(clients)
 
-# @app.post('/books', response_model=Book,
-#           status_code=status.HTTP_201_CREATED)
-# async def create_a_book(book:Book):
-#     new_book = Book(title=book.title, description=book.description)
+        reslt = [el for el in session.execute(f"""Select * from Tokens 
+                                                  where lower(client) in ({clients})""")]
+        if (len(reslt) == 0):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
+                            detail='Client(s) do not exist in the database.')
 
-#     session.add(new_book)
+    else:
+        reslt = [el for el in session.execute("Select * from Tokens")]
 
-#     session.commit()
+    df = pd.DataFrame(reslt, columns = ['id', 'client', 'token', 'package', 'email', 'contact_person', 'create_date'])
 
-#     return new_book
-    
-    
+    return df.to_html(index=False)
 
-# @app.get('/book/{book_id}', response_model=Book)
-# async def get_a_book(book_id:int):
-#     statement = select(Book).where(Book.id==book_id)
-
-#     result = session.exec(statement).first()
-
-#     if result == None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-
-#     return result
-
-    
-
-
-# @app.put('/book/{book_id}', response_model=Book)
-# async def update_a_book(book_id:int,book:Book):
-#     statement = select(Book).where(Book.id==book_id)
-
-#     result = session.exec(statement).first()
-
-#     result.title = book.title
-#     result.description = book.description
-
-#     session.commit()
-
-#     return result
-
-
-    
-
-# @app.delete('/book/{book_id}', status_code=status.HTTP_204_NO_CONTENT)
-# async def delete_a_book(book_id:int):
-#     statement = select(Book).where(Book.id==book_id)
-
-#     result = session.exec(statement).one_or_none()
-
-#     if result == None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-#                             detail="Resource Not Found")
-
-#     session.delete(result)
-
-#     return result
