@@ -183,7 +183,7 @@ def get_companies(user: str, token: str):
        The <i><font color="red">\<username\></font></i> and <i><font color="red">\<access_tokens\></font></i> will be provided to you by **Earthmark**<br>
        """
     if ((user.lower() == EARTH_USER.lower()) & (token == EARTH_CRED)):
-        results = [el for el in session.execute("Select company from Ratings")]
+        results = [el for el in session.execute("Select company from Ratings order by company")]
         df = pd.DataFrame(results, columns = ['company'])
         return df.to_html(index=False)
 
