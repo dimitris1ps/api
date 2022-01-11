@@ -51,14 +51,14 @@ tags_metadata = [
                           """
     },
     {
-        "name": "View Companies",
+        "name": "Companies",
         "description": """View the companies for which info exist (
                           <code><b><font color='#001f75'>Clients</font></b></code>, 
                           <code><b><font color='#780000'>Earthmark</font></b></code>)
                           """
     },
     {
-        "name": "View Report",
+        "name": "Report",
         "description": "View or export report on API usage (<code><b><font color='#780000'>Earthmark</font></b></code>)"
     },
     {
@@ -175,7 +175,7 @@ def get_ratings(user: str, token: str, companies: Optional[str] = 'all'):
 
 #################################################################################################################
 
-@app.get('/companies', response_class=HTMLResponse, status_code=status.HTTP_200_OK, tags=["View Companies"])
+@app.get('/companies', response_class=HTMLResponse, status_code=status.HTTP_200_OK, tags=["Companies"])
 def get_companies(user: str, token: str):
     """See which companies we have sustainability info for.<br><br>
        Example:<br>
