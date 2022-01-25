@@ -10,6 +10,7 @@ print("CREATE DATABASE...")
 
 SQLModel.metadata.create_all(engine)
 
+
 ## Initialize data in db
 
 
