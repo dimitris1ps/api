@@ -1,6 +1,10 @@
-from fastapi import FastAPI, status, Query
+from fastapi import FastAPI, status, Query, Request, Depends
 from fastapi.exceptions import HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from sqlmodel import Session, select
 from typing import Optional, List
@@ -15,30 +19,25 @@ from uuid import uuid4
 import os
 
 BASE_DIR = os.path.dirname(os.path.realpath("__file__"))
-URL = "http://127.0.0.1"
+URL = "http://54.171.232.141"
 EARTH_CRED = "earth7eeb1af8861c4bb29c50bdb4815d5381"
 EARTH_USER = 'Earthmark'
 COMPANIES_THRESHOLD = 20
+VIEW_EARTHMARK_ENDPOINTS = False
 
 API_DESCRIPTION = """
 The Earthmark API shares business & environment sustainability metrics. 🌍🌱🌳
-
 ## The Metrics
-
 You can retrieve company information related to **business score**, **environment score** the **governance transparency score** and an **Earthmark ratings** which is derived from all the previous metrics.
-
 ## Info
-
 You will be able to:
-
 * **Retrieve company metrics**
 
+<br>
 Earthmark is able to:
-
 * **Retrieve company metrics**
 * **Create, update, delete access tokens**
 * **View report on api usage**
-
 ## Contact
 """
 
@@ -57,37 +56,53 @@ tags_metadata = [
                           <code><b><font color='#780000'>Earthmark</font></b></code>)
                           """
     },
-    {
-        "name": "Report",
-        "description": "View or export report on API usage (<code><b><font color='#780000'>Earthmark</font></b></code>)"
-    },
-    {
-        "name": "Tokens",
-        "description": "Create, Update, Delete or View access tokens (<code><b><font color='#780000'>Earthmark</font></b></code>)"
-    },
+    
+#     {
+#         "name": "Report",
+#         "description": "View or export report on API usage (<code><b><font color='#780000'>Earthmark</font></b></code>)"
+#     },
+#     {
+#         "name": "Tokens",
+#         "description": "Create, Update, Delete or View access tokens (<code><b><font color='#780000'>Earthmark</font></b></code>)"
+#     },
+#     {
+#         "name": "Testing",
+#         "description": """Retrieve responders IP. Just for testing purposes (
+#                           <code><b><font color='#001f75'>Clients</font></b></code>, 
+#                           <code><b><font color='#780000'>Earthmark</font></b></code>)
+#                           """
+#     }
+    
 ]
 
+
+# -----------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address)
 app=FastAPI(title="Earthmark API", description=API_DESCRIPTION, 
     contact={
         "name": "Anastasis Stamatis",
         "url": "https://www.dataphoria.gr/",
         "email": "anastasis@dataphoria.gr ",
     }, openapi_tags=tags_metadata)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+#-----------------------------------------------------------------------------
 
 session=Session(bind=engine)
 
-@app.get('/rating', response_model=list, status_code=status.HTTP_200_OK, tags=["Ratings"])
-def get_ratings(user: str, token: str, companies: Optional[str] = 'all'):
+@app.get('/rating', response_model=list, status_code=status.HTTP_200_OK, tags=["Ratings"], include_in_schema=True)
+@limiter.limit("1/second")
+def get_ratings(request: Request, user: str, token: str, companies: Optional[str] = 'all'):
     """Retrieve company metrics such as business, environment and governance transparency scores 
        as well as the Earthmark rating.<br><br>
        Examples for retrieving **one** company info:<br>
-       <a href="http://127.0.0.1:8000/ratings?user=<username>&token=<access_token>&companies=Nike" target="_blank">http://127.0.0.1:8000/ratings?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&companies=<font color="red">Nike</font></a><br>
+       <a href="http://54.171.232.141:8000/ratings?user=<username>&token=<access_token>&companies=Nike" target="_blank">http://54.171.232.141:8000/ratings?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&companies=<font color="red">Nike</font></a><br>
        The <i><font color="red">\<username\></font></i> and <i><font color="red">\<access_tokens\></font></i> will be provided to you by **Earthmark**<br>
        <br>Examples for retrieving **more than one** company info:<br>
-       <a href="http://127.0.0.1:8000/ratings?user=<username>&token=<access_token>&companies=Nike" target="_blank">http://127.0.0.1:8000/ratings?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&companies=<font color="red">Nike</font>;<font color="red">Parcel2go</font>;<font color="red">B & Q</font></a><br>
+       <a href="http://54.171.232.141:8000/ratings?user=<username>&token=<access_token>&companies=Nike;Parcel2go;B & Q" target="_blank">http://54.171.232.141:8000/ratings?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&companies=<font color="red">Nike</font>;<font color="red">Parcel2go</font>;<font color="red">B & Q</font></a><br>
        Seperate each company with a semicolon <b><font color="red">;</font></b><br> Info from up to **50** companies can be retrieved<br>
        <br>Earthmark can also retrieve **all** info:<br>
-       <a href="http://127.0.0.1:8000/ratings?user=<username>&token=<access_token>" target="_blank">http://127.0.0.1:8000/ratings?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
+       <a href="http://54.171.232.141:8000/ratings?user=<username>&token=<access_token>" target="_blank">http://54.171.232.141:8000/ratings?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
        """
 
     res = [el for el in session.execute(f"Select token, package from Tokens where lower(client) = '{user.lower()}'")]
@@ -175,11 +190,12 @@ def get_ratings(user: str, token: str, companies: Optional[str] = 'all'):
 
 #################################################################################################################
 
-@app.get('/companies', response_class=HTMLResponse, status_code=status.HTTP_200_OK, tags=["Companies"])
-def get_companies(user: str, token: str):
+@app.get('/companies', response_class=HTMLResponse, status_code=status.HTTP_200_OK, tags=["Companies"], include_in_schema=True)
+@limiter.limit("1/second")
+def get_companies(request: Request, user: str, token: str):
     """See which companies we have sustainability info for.<br><br>
        Example:<br>
-       <a href="http://127.0.0.1:8000/companies?user=<username>&token=<access_token>" target="_blank">http://127.0.0.1:8000/companies?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
+       <a href="http://54.171.232.141:8000/companies?user=<username>&token=<access_token>" target="_blank">http://54.171.232.141:8000/companies?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
        The <i><font color="red">\<username\></font></i> and <i><font color="red">\<access_tokens\></font></i> will be provided to you by **Earthmark**<br>
        """
     if ((user.lower() == EARTH_USER.lower()) & (token == EARTH_CRED)):
@@ -220,11 +236,11 @@ def get_companies(user: str, token: str):
 
 ####################################################################################################################
 
-@app.get('/statistics', response_class=HTMLResponse, status_code=status.HTTP_200_OK, tags=["Report"])
+@app.get('/statistics', response_class=HTMLResponse, status_code=status.HTTP_200_OK, tags=["Report"], include_in_schema=VIEW_EARTHMARK_ENDPOINTS)
 def get_stats(user: str, token: str):
     """View api usage<br><br>
        Example:<br>
-       <a href="http://127.0.0.1:8000/statistics?user=<username>&token=<access_token>" target="_blank">http://127.0.0.1:8000/statistics?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
+       <a href="http://54.171.232.141:8000/statistics?user=<username>&token=<access_token>" target="_blank">http://54.171.232.141:8000/statistics?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
        <br>Can be viewed only from Earthmark.
        """
     if not((user.lower() == EARTH_USER.lower()) & (token == EARTH_CRED)):
@@ -237,11 +253,11 @@ def get_stats(user: str, token: str):
         return df.to_html(index=False)
 
 
-@app.get('/statistics/report', response_class=FileResponse, status_code=status.HTTP_200_OK, tags=["Report"])
+@app.get('/statistics/report', response_class=FileResponse, status_code=status.HTTP_200_OK, tags=["Report"], include_in_schema=VIEW_EARTHMARK_ENDPOINTS)
 def get_stats(user: str, token: str):
     """Download report of api usage<br><br>
        Example:<br>
-       <a href="http://127.0.0.1:8000/statistics/report?user=<username>&token=<access_token>" target="_blank">http://127.0.0.1:8000/statistics/report?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
+       <a href="http://54.171.232.141:8000/statistics/report?user=<username>&token=<access_token>" target="_blank">http://54.171.232.141:8000/statistics/report?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font></a><br>
        <br>Can be export only from Earthmark.
        """
     if not((user.lower() == EARTH_USER.lower()) & (token == EARTH_CRED)):
@@ -251,11 +267,11 @@ def get_stats(user: str, token: str):
         with Session(engine) as sess:
             results = [el for el in session.execute("Select * from Statistics")]
         df = pd.DataFrame(results, columns = ['id', 'client', 'api_calls', 'company_calls', 'report_date', 'report_month'])
-        df.to_csv(BASE_DIR+'\\report.csv')
-        return BASE_DIR+'\\report.csv'
+        df.to_csv(BASE_DIR+'/report.csv')
+        return BASE_DIR+'/report.csv'
 
 
-@app.get('/token/create', status_code=status.HTTP_200_OK, response_model=list, tags=["Tokens"])
+@app.get('/token/create', status_code=status.HTTP_200_OK, response_model=list, tags=["Tokens"], include_in_schema=False)
 def create_token(user: str, 
                  token: str, 
                  client: str, 
@@ -268,16 +284,15 @@ def create_token(user: str,
                  delete: bool = False):
     """Create, update or delete access token<br><br>
        Create-Update example:<br>
-       <a href="http://127.0.0.1:8000/token/create?user=<username>&token=<access_token>&client=<cleint_name>&package=xlarge&email=info@somedomain.com&contact_person=first last" target="_blank">
-       http://127.0.0.1:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&client=<font color="red"><client_name></font>&package=<font color="red">xlarge</font>&email=<font color="red">info@somedomain.com</font>&contact_person=<font color="red">first last</font>
+       <a href="http://54.171.232.141:8000/token/create?user=<username>&token=<access_token>&client=<cleint_name>&package=xlarge&email=info@somedomain.com&contact_person=first last" target="_blank">
+       http://54.171.232.141:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&client=<font color="red"><client_name></font>&package=<font color="red">xlarge</font>&email=<font color="red">info@somedomain.com</font>&contact_person=<font color="red">first last</font>
        </a><br>
        The <i><font color="red">\<username\></font></i> and <i><font color="red">\<access_tokens\></font></i> are Earthmarks'. The package parameter can be one of the following: small, medium, large or xlarge<br>
        If the client exists then it gets updated with a new token and with have the package specified in the url. If the client does not exist, then a it is created.
-
        <br><br>
        Delete example:<br>
-       <a href="http://127.0.0.1:8000/token/create?user=<username>&token=<access_token>&client=<cleint_name>&delete=true" target="_blank">
-       http://127.0.0.1:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&client=<font color="red"><client_name></font>&delete=<font color="red">true</font>
+       <a href="http://54.171.232.141:8000/token/create?user=<username>&token=<access_token>&client=<cleint_name>&delete=true" target="_blank">
+       http://54.171.232.141:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&client=<font color="red"><client_name></font>&delete=<font color="red">true</font>
        </a><br>
        if the client exists then the user and access token gets deleted.
        """
@@ -346,22 +361,21 @@ def create_token(user: str,
     return res
 
 
-@app.get('/token/view', status_code=status.HTTP_200_OK, response_class=HTMLResponse, tags=["Tokens"])
+@app.get('/token/view', status_code=status.HTTP_200_OK, response_class=HTMLResponse, tags=["Tokens"], include_in_schema=VIEW_EARTHMARK_ENDPOINTS)
 def view_token(user: str, 
                token: str, 
                client: Optional[str] = None):
     """View client list along with tokens<br><br>
        Example of token for *one* client:<br>
-       <a href="http://127.0.0.1:8000/token/view?user=<username>&token=<access_token>&client=<cleint_name>" target="_blank">
-       http://127.0.0.1:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&client=<font color="red"><client_name></font>
+       <a href="http://54.171.232.141:8000/token/view?user=<username>&token=<access_token>&client=<cleint_name>" target="_blank">
+       http://54.171.232.141:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>&client=<font color="red"><client_name></font>
        </a><br>
        The <i><font color="red">\<username\></font></i> and <i><font color="red">\<access_tokens\></font></i> are Earthmarks'.<br>
        It searches for the client specified in the db and returns the info along with the token.
-
        <br><br>
        Example retrieving *all* tokens:<br>
-       <a href="http://127.0.0.1:8000/token/create?user=<username>&token=<access_token>" target="_blank">
-       http://127.0.0.1:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>
+       <a href="http://54.171.232.141:8000/token/create?user=<username>&token=<access_token>" target="_blank">
+       http://54.171.232.141:8000/token/create?user=<font color="red">\<username\></font>&token=<font color="red"><access_token></font>
        </a><br>
        Returns all client info along with their tokens.
        """
@@ -387,3 +401,7 @@ def view_token(user: str,
 
     return df.to_html(index=False)
 
+@app.get('/ip', status_code=status.HTTP_200_OK, tags=["Testing"], include_in_schema=VIEW_EARTHMARK_ENDPOINTS)
+def my_ip(request: Request):
+    ip = request.client.host
+    return {'Requestor IP': ip}
